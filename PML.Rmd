@@ -68,9 +68,7 @@ cval <- trainDataFinal[-inTrain, ]
 
 I initially tried the random-forest technique from caret to generate a predictive model. However, besides running very slow, it returned an error that it cannot allocate vector of size 1.4 GB on my system.
 
-It took more than one day to train all models. Afterwards I tested their performance on the cross-validation dataset. It turned out that all models showed a good performance (because their accuracy was above 99%) though their training times were quite different.
-
-Due to the similar performance, I will present the model with the shortest training time.
+So, I  tried tree which was fast but not accurate.
 ```{r}
 
 library(tree)
