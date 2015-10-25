@@ -1,0 +1,139 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Gaurav Lamba"
+date: "October 25, 2015"
+output: html_document
+---
+
+##Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, our goal will be is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##DataThe training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+Reading training data and setting all blank values to NA
+
+```{r}
+trainData <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+testData <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+```
+##Rationalizing the dataset
+Lets take out the columns from analysis which are mostly NAs
+```{r}
+meanNAs <- colMeans(is.na(trainData))
+table(meanNAs)
+```
+There are 100 columns in which 97.93% of values are missing and these colums can be ignore for the purpose of training the model.
+
+Let us take out those columns
+```{r}
+colIndex <- !meanNAs
+trainDataMod <- trainData[colIndex]
+testDataMod <- testData[colIndex]
+ncol(trainDataMod)
+```
+So, this brings number of columns to 60. Now, there are some columns beginning with time stamps, user name, new_window etc. which is more of metadata and do not have influence on model that we are trying to train. So, let us take them out.
+
+```{r}
+metaIndex <- grep("^X$|timestamp|user_name|window", names(trainDataMod))
+trainDataFinal <- trainDataMod[-metaIndex]
+testDataFinal <- testDataMod[-metaIndex]
+ncol(trainDataFinal)
+```
+
+So, finally we are down to 53 columns and go ahead with training our model.
+
+## Partitioning training data for cross-validation
+
+Now, the outcome is 'classe, and can use othe columns or a combination as predictors. Partition the finalized dataset into train and cross-validation at p=0.7
+
+```{r}
+library(caret)
+inTrain <- createDataPartition(y = trainDataFinal$classe, p = 0.7, list = FALSE)
+training <- trainDataFinal[inTrain, ]
+cval <- trainDataFinal[-inTrain, ]
+```
+
+## Training the Model
+
+I initially tried the random-forest technique from caret to generate a predictive model. However, besides running very slow, it returned an error that it cannot allocate vector of size 1.4 GB on my system.
+
+It took more than one day to train all models. Afterwards I tested their performance on the cross-validation dataset. It turned out that all models showed a good performance (because their accuracy was above 99%) though their training times were quite different.
+
+Due to the similar performance, I will present the model with the shortest training time.
+```{r}
+
+library(tree)
+set.seed(123456)
+tree_training <- tree(classe~.,data=training)
+summary(tree_training)
+tree_pred=predict(tree_training,cval,type="class")
+predMatrix = with(cval,table(tree_pred,classe))
+sum(diag(predMatrix))/sum(as.vector(predMatrix)) # error rate
+```
+0.68 as mis-classification error tells that single Tree is not good. Let me try randomForest as package.
+
+```{r}
+
+library(randomForest)
+set.seed(123456)
+rf_training <- randomForest(classe~.,data=training, ntree=100, importance=TRUE)
+rf_training
+varImpPlot(rf_training,)
+```
+This model gives OOB estimate of error rate at 0.6% and above plot shows relative importance of predictors.
+
+##Cross Validation of Model
+
+```{r}
+rf_pred  <-predict(rf_training,cval,type="class")
+predMatrix <-with(cval,table(rf_pred,classe))
+sum(diag(predMatrix))/sum(as.vector(predMatrix)) # error rate
+```
+It is an accurate estimate at 0.995 and number of variables tried at each split is 7.
+
+## Submission using Coursera Code
+
+We predict the classification of the 20 observations of the testing data set for Coursera's "Course Project: Submission" challenge page:
+
+```{r}
+predictions <- predict(rf_training, newdata=testDataFinal)
+testDataFinal$classe <- predictions
+
+```
+
+
+
+We create one .CSV file with all the results, presented in two columns (named problem_id and classe) and 20 rows of data:
+```{r}
+submit <- data.frame(problem_id = testDataFinal$problem_id, classe = predictions)
+write.csv(submit, file = "coursera-submission.csv", row.names = FALSE)
+```
+And we create twenty .TXT file that we will upload one by one in the Coursera website (the 20 files created are called problem_1.txt to problem_20.txt):
+```{r}
+answers = testDataFinal$classe
+answers
+```
+
+```{r}
+write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_",i,".txt")
+    write.table(x[i], file=filename, quote=FALSE, row.names=FALSE, col.names=FALSE)
+  }
+}
+write_files(answers)
+
+```
+
